@@ -17,13 +17,23 @@
  * This file implements the schannel provider, or, the SSL/TLS implementations.
  */
 
-#include "precomp.h"
+#include "config.h"
+#include "wine/port.h"
 
-#include <wine/config.h>
-#include <wine/port.h>
+#ifdef __REACTOS__
+#include <precomp.h>
 #include <strsafe.h>
+#else
+#include <errno.h>
+#include <stdarg.h>
+#include "windef.h"
+#include "winbase.h"
+#include "sspi.h"
+#include "schannel.h"
+#include "wine/debug.h"
+#endif
 
-#include "schannel_priv.h"
+#include "secur32_priv.h"
 
 #include <polarssl/config.h>
 #include <polarssl/net.h>
@@ -35,9 +45,16 @@
 #include <polarssl/error.h>
 #include <polarssl/debug.h>
 
+#ifdef __REACTOS__
 #define __wine_dbch_secur32 __wine_dbch_schannel
+static HMODULE polarssl_handle;
+#else
+#include "wine/library.h"
+WINE_DEFAULT_DEBUG_CHANNEL(secur32);
+WINE_DECLARE_DEBUG_CHANNEL(winediag);
+static void *polarssl_handle;
+#endif
 
-static HINSTANCE polarssl_handle;
 typedef struct
 {
     ssl_context ssl;
@@ -46,8 +63,8 @@ typedef struct
     struct schan_transport *transport;
 } POLARSSL_SESSION, *PPOLARSSL_SESSION;
 
-#ifdef _MSC_VER
-#include "msvc_typeof_hack_polar.h"
+#if defined(__REACTOS__) && defined(_MSC_VER)
+#include <msvc_typeof_hack_polar.h>
 #endif
 
 #define MAKE_FUNCPTR(f) static typeof(f) * p##f
@@ -186,7 +203,7 @@ static int schan_verify(void *data, x509_crt *crt, int depth, int *flags)
     if (crt_flags == 0)
         TRACE(" This certificate has no flags\n");
 
-    return( 0 );
+    return 0 ;
 }
 
 BOOL schan_imp_create_session(schan_imp_session *session, schan_credentials *cred)
@@ -246,9 +263,9 @@ BOOL schan_imp_create_session(schan_imp_session *session, schan_credentials *cre
         if (ret < 0)
         {
             ERR("Loading the CA root certificate failed! x509_crt_parse returned -0x%x", -ret);
-            pctr_drbg_free( &s->ctr_drbg );
-            pentropy_free( &s->entropy );
-            pssl_free( &s->ssl );
+            pctr_drbg_free(&s->ctr_drbg);
+            pentropy_free(&s->entropy);
+            pssl_free(&s->ssl);
             HeapFree(GetProcessHeap(), 0, s);
             return FALSE;
         }*/
@@ -336,65 +353,82 @@ SECURITY_STATUS schan_imp_handshake(schan_imp_session session)
 
 static unsigned int schannel_get_cipher_block_size(int ciphersuite_id)
 {
-    const unsigned int algorithms[] =
+    const ssl_ciphersuite_t *cipher_suite = pssl_ciphersuite_from_id( ciphersuite_id );
+    const struct
     {
-        1,  // POLARSSL_CIPHER_NONE
-        1,  // POLARSSL_CIPHER_NULL
-        16, // POLARSSL_CIPHER_AES_128_ECB
-        16, // POLARSSL_CIPHER_AES_192_ECB
-        16, // POLARSSL_CIPHER_AES_256_ECB
-        16, // POLARSSL_CIPHER_AES_128_CBC
-        16, // POLARSSL_CIPHER_AES_192_CBC
-        16, // POLARSSL_CIPHER_AES_256_CBC
-        16, // POLARSSL_CIPHER_AES_128_CFB128
-        16, // POLARSSL_CIPHER_AES_192_CFB128
-        16, // POLARSSL_CIPHER_AES_256_CFB128
-        16, // POLARSSL_CIPHER_AES_128_CTR
-        16, // POLARSSL_CIPHER_AES_192_CTR
-        16, // POLARSSL_CIPHER_AES_256_CTR
-        16, // POLARSSL_CIPHER_AES_128_GCM
-        16, // POLARSSL_CIPHER_AES_192_GCM
-        16, // POLARSSL_CIPHER_AES_256_GCM
-        // FIXME: camelia sizes???
-        1,  // POLARSSL_CIPHER_CAMELLIA_128_ECB
-        1,  // POLARSSL_CIPHER_CAMELLIA_192_ECB
-        1,  // POLARSSL_CIPHER_CAMELLIA_256_ECB
-        1,  // POLARSSL_CIPHER_CAMELLIA_128_CBC
-        1,  // POLARSSL_CIPHER_CAMELLIA_192_CBC
-        1,  // POLARSSL_CIPHER_CAMELLIA_256_CBC
-        1,  // POLARSSL_CIPHER_CAMELLIA_128_CFB128
-        1,  // POLARSSL_CIPHER_CAMELLIA_192_CFB128
-        1,  // POLARSSL_CIPHER_CAMELLIA_256_CFB128
-        1,  // POLARSSL_CIPHER_CAMELLIA_128_CTR
-        1,  // POLARSSL_CIPHER_CAMELLIA_192_CTR
-        1,  // POLARSSL_CIPHER_CAMELLIA_256_CTR
-        1,  // POLARSSL_CIPHER_CAMELLIA_128_GCM
-        1,  // POLARSSL_CIPHER_CAMELLIA_192_GCM
-        1,  // POLARSSL_CIPHER_CAMELLIA_256_GCM
-        8,  // POLARSSL_CIPHER_DES_ECB
-        8,  // POLARSSL_CIPHER_DES_CBC
-        8,  // POLARSSL_CIPHER_DES_EDE_ECB
-        8,  // POLARSSL_CIPHER_DES_EDE_CBC
-        8,  // POLARSSL_CIPHER_DES_EDE3_ECB
-        8,  // POLARSSL_CIPHER_DES_EDE3_CBC
-        // FIXME: blowfish sizes???
-        1,  // POLARSSL_CIPHER_BLOWFISH_ECB
-        1,  // POLARSSL_CIPHER_BLOWFISH_CBC
-        1,  // POLARSSL_CIPHER_BLOWFISH_CFB64
-        1,  // POLARSSL_CIPHER_BLOWFISH_CTR
-        1,  // POLARSSL_CIPHER_ARC4_128
-        16, // POLARSSL_CIPHER_AES_128_CCM
-        16, // POLARSSL_CIPHER_AES_192_CCM
-        16, // POLARSSL_CIPHER_AES_256_CCM
-        // FIXME: camelia sizes???
-        1,  // POLARSSL_CIPHER_CAMELLIA_128_CCM
-        1,  // POLARSSL_CIPHER_CAMELLIA_192_CCM
-        1,  // POLARSSL_CIPHER_CAMELLIA_256_CCM
+        int algo;
+        unsigned int size;
+    }
+    algorithms[] =
+    {
+        {POLARSSL_CIPHER_NONE,                   1},
+        {POLARSSL_CIPHER_NULL,                   1},
+    #ifdef POLARSSL_AES_C
+        {POLARSSL_CIPHER_AES_128_ECB,           16},
+        {POLARSSL_CIPHER_AES_192_ECB,           16},
+        {POLARSSL_CIPHER_AES_256_ECB,           16},
+        {POLARSSL_CIPHER_AES_128_CBC,           16},
+        {POLARSSL_CIPHER_AES_192_CBC,           16},
+        {POLARSSL_CIPHER_AES_256_CBC,           16},
+        {POLARSSL_CIPHER_AES_128_CFB128,        16},
+        {POLARSSL_CIPHER_AES_192_CFB128,        16},
+        {POLARSSL_CIPHER_AES_256_CFB128,        16},
+        {POLARSSL_CIPHER_AES_128_CTR,           16},
+        {POLARSSL_CIPHER_AES_192_CTR,           16},
+        {POLARSSL_CIPHER_AES_256_CTR,           16},
+        {POLARSSL_CIPHER_AES_128_GCM,           16},
+        {POLARSSL_CIPHER_AES_192_GCM,           16},
+        {POLARSSL_CIPHER_AES_256_GCM,           16},
+    #endif
+    #ifdef POLARSSL_CAMELLIA_C
+        {POLARSSL_CIPHER_CAMELLIA_128_ECB,      16},
+        {POLARSSL_CIPHER_CAMELLIA_192_ECB,      16},
+        {POLARSSL_CIPHER_CAMELLIA_256_ECB,      16},
+        {POLARSSL_CIPHER_CAMELLIA_128_CBC,      16},
+        {POLARSSL_CIPHER_CAMELLIA_192_CBC,      16},
+        {POLARSSL_CIPHER_CAMELLIA_256_CBC,      16},
+        {POLARSSL_CIPHER_CAMELLIA_128_CFB128,   16},
+        {POLARSSL_CIPHER_CAMELLIA_192_CFB128,   16},
+        {POLARSSL_CIPHER_CAMELLIA_256_CFB128,   16},
+        {POLARSSL_CIPHER_CAMELLIA_128_CTR,      16},
+        {POLARSSL_CIPHER_CAMELLIA_192_CTR,      16},
+        {POLARSSL_CIPHER_CAMELLIA_256_CTR,      16},
+        {POLARSSL_CIPHER_CAMELLIA_128_GCM,      16},
+        {POLARSSL_CIPHER_CAMELLIA_192_GCM,      16},
+        {POLARSSL_CIPHER_CAMELLIA_256_GCM,      16},
+    #endif
+    #ifdef POLARSSL_DES_C
+        {POLARSSL_CIPHER_DES_ECB,                8},
+        {POLARSSL_CIPHER_DES_CBC,                8},
+        {POLARSSL_CIPHER_DES_EDE_ECB,            8},
+        {POLARSSL_CIPHER_DES_EDE_CBC,            8},
+        {POLARSSL_CIPHER_DES_EDE3_ECB,           8},
+        {POLARSSL_CIPHER_DES_EDE3_CBC,           8},
+    #endif
+    #ifdef POLARSSL_BLOWFISH_C
+        {POLARSSL_CIPHER_BLOWFISH_ECB,           8},
+        {POLARSSL_CIPHER_BLOWFISH_CBC,           8},
+        {POLARSSL_CIPHER_BLOWFISH_CFB64,         8},
+        {POLARSSL_CIPHER_BLOWFISH_CTR,           8},
+    #endif
+    #ifdef POLARSSL_ARC4_C
+        {POLARSSL_CIPHER_ARC4_128,               1},
+    #endif
+    #ifdef POLARSSL_CCM_C
+        {POLARSSL_CIPHER_AES_128_CCM,           16},
+        {POLARSSL_CIPHER_AES_192_CCM,           16},
+        {POLARSSL_CIPHER_AES_256_CCM,           16},
+        {POLARSSL_CIPHER_CAMELLIA_128_CCM,      16},
+        {POLARSSL_CIPHER_CAMELLIA_192_CCM,      16},
+        {POLARSSL_CIPHER_CAMELLIA_256_CCM,      16},
+    #endif
     };
 
-    if (ciphersuite_id >= 0 && ciphersuite_id < sizeof(algorithms) / sizeof(algorithms[0]))
+    int i;
+    for (i = 0; i < sizeof(algorithms) / sizeof(algorithms[0]); i++)
     {
-        return algorithms[ciphersuite_id];
+        if (algorithms[i].algo == cipher_suite->cipher)
+            return algorithms[i].size;
     }
 
     FIXME("Unknown cipher %#x, returning 1\n", ciphersuite_id);
@@ -403,64 +437,83 @@ static unsigned int schannel_get_cipher_block_size(int ciphersuite_id)
 
 static unsigned int schannel_get_cipher_key_size(int ciphersuite_id)
 {
-
-    const unsigned int algorithms[] =
+    const ssl_ciphersuite_t *cipher_suite = pssl_ciphersuite_from_id( ciphersuite_id );
+    const struct
     {
-        0,   // POLARSSL_CIPHER_NONE
-        0,   // POLARSSL_CIPHER_NULL
-        128, // POLARSSL_CIPHER_AES_128_ECB
-        192, // POLARSSL_CIPHER_AES_192_ECB
-        256, // POLARSSL_CIPHER_AES_256_ECB
-        128, // POLARSSL_CIPHER_AES_128_CBC
-        192, // POLARSSL_CIPHER_AES_192_CBC
-        256, // POLARSSL_CIPHER_AES_256_CBC
-        128, // POLARSSL_CIPHER_AES_128_CFB128
-        192, // POLARSSL_CIPHER_AES_192_CFB128
-        256, // POLARSSL_CIPHER_AES_256_CFB128
-        128, // POLARSSL_CIPHER_AES_128_CTR
-        192, // POLARSSL_CIPHER_AES_192_CTR
-        256, // POLARSSL_CIPHER_AES_256_CTR
-        128, // POLARSSL_CIPHER_AES_128_GCM
-        192, // POLARSSL_CIPHER_AES_192_GCM
-        256, // POLARSSL_CIPHER_AES_256_GCM
-        128, // POLARSSL_CIPHER_CAMELLIA_128_ECB
-        192, // POLARSSL_CIPHER_CAMELLIA_192_ECB
-        256, // POLARSSL_CIPHER_CAMELLIA_256_ECB
-        128, // POLARSSL_CIPHER_CAMELLIA_128_CBC
-        192, // POLARSSL_CIPHER_CAMELLIA_192_CBC
-        256, // POLARSSL_CIPHER_CAMELLIA_256_CBC
-        128, // POLARSSL_CIPHER_CAMELLIA_128_CFB128
-        192, // POLARSSL_CIPHER_CAMELLIA_192_CFB128
-        256, // POLARSSL_CIPHER_CAMELLIA_256_CFB128
-        128, // POLARSSL_CIPHER_CAMELLIA_128_CTR
-        192, // POLARSSL_CIPHER_CAMELLIA_192_CTR
-        256, // POLARSSL_CIPHER_CAMELLIA_256_CTR
-        128, // POLARSSL_CIPHER_CAMELLIA_128_GCM
-        192, // POLARSSL_CIPHER_CAMELLIA_192_GCM
-        256, // POLARSSL_CIPHER_CAMELLIA_256_GCM
-        56,  // POLARSSL_CIPHER_DES_ECB
-        56,  // POLARSSL_CIPHER_DES_CBC
-        56,  // POLARSSL_CIPHER_DES_EDE_ECB
-        56,  // POLARSSL_CIPHER_DES_EDE_CBC
-        168, // POLARSSL_CIPHER_DES_EDE3_ECB
-        168, // POLARSSL_CIPHER_DES_EDE3_CBC
-        // FIXME: blowfish sizes???
-        0,   // POLARSSL_CIPHER_BLOWFISH_ECB
-        0,   // POLARSSL_CIPHER_BLOWFISH_CBC
-        0,   // POLARSSL_CIPHER_BLOWFISH_CFB64
-        0,   // POLARSSL_CIPHER_BLOWFISH_CTR
-        128, // POLARSSL_CIPHER_ARC4_128
-        128, // POLARSSL_CIPHER_AES_128_CCM
-        192, // POLARSSL_CIPHER_AES_192_CCM
-        256, // POLARSSL_CIPHER_AES_256_CCM
-        128, // POLARSSL_CIPHER_CAMELLIA_128_CCM
-        192, // POLARSSL_CIPHER_CAMELLIA_192_CCM
-        256, // POLARSSL_CIPHER_CAMELLIA_256_CCM
+        int algo;
+        unsigned int size;
+    }
+    algorithms[] =
+    {
+        {POLARSSL_CIPHER_NONE,                    0},
+        {POLARSSL_CIPHER_NULL,                    0},
+    #ifdef POLARSSL_AES_C
+        {POLARSSL_CIPHER_AES_128_ECB,           128},
+        {POLARSSL_CIPHER_AES_192_ECB,           192},
+        {POLARSSL_CIPHER_AES_256_ECB,           256},
+        {POLARSSL_CIPHER_AES_128_CBC,           128},
+        {POLARSSL_CIPHER_AES_192_CBC,           192},
+        {POLARSSL_CIPHER_AES_256_CBC,           256},
+        {POLARSSL_CIPHER_AES_128_CFB128,        128},
+        {POLARSSL_CIPHER_AES_192_CFB128,        192},
+        {POLARSSL_CIPHER_AES_256_CFB128,        256},
+        {POLARSSL_CIPHER_AES_128_CTR,           128},
+        {POLARSSL_CIPHER_AES_192_CTR,           192},
+        {POLARSSL_CIPHER_AES_256_CTR,           256},
+        {POLARSSL_CIPHER_AES_128_GCM,           128},
+        {POLARSSL_CIPHER_AES_192_GCM,           192},
+        {POLARSSL_CIPHER_AES_256_GCM,           256},
+    #endif
+    #ifdef POLARSSL_CAMELLIA_C
+        {POLARSSL_CIPHER_CAMELLIA_128_ECB,      128},
+        {POLARSSL_CIPHER_CAMELLIA_192_ECB,      192},
+        {POLARSSL_CIPHER_CAMELLIA_256_ECB,      256},
+        {POLARSSL_CIPHER_CAMELLIA_128_CBC,      128},
+        {POLARSSL_CIPHER_CAMELLIA_192_CBC,      192},
+        {POLARSSL_CIPHER_CAMELLIA_256_CBC,      256},
+        {POLARSSL_CIPHER_CAMELLIA_128_CFB128,   128},
+        {POLARSSL_CIPHER_CAMELLIA_192_CFB128,   192},
+        {POLARSSL_CIPHER_CAMELLIA_256_CFB128,   256},
+        {POLARSSL_CIPHER_CAMELLIA_128_CTR,      128},
+        {POLARSSL_CIPHER_CAMELLIA_192_CTR,      192},
+        {POLARSSL_CIPHER_CAMELLIA_256_CTR,      256},
+        {POLARSSL_CIPHER_CAMELLIA_128_GCM,      128},
+        {POLARSSL_CIPHER_CAMELLIA_192_GCM,      192},
+        {POLARSSL_CIPHER_CAMELLIA_256_GCM,      256},
+    #endif
+    #ifdef POLARSSL_DES_C
+        {POLARSSL_CIPHER_DES_ECB,               56},
+        {POLARSSL_CIPHER_DES_CBC,               56},
+        {POLARSSL_CIPHER_DES_EDE_ECB,           56},
+        {POLARSSL_CIPHER_DES_EDE_CBC,           56},
+        {POLARSSL_CIPHER_DES_EDE3_ECB,          168},
+        {POLARSSL_CIPHER_DES_EDE3_CBC,          168},
+    #endif
+    #ifdef POLARSSL_BLOWFISH_C
+        /* FIXME: blowfish sizes??? */
+        {POLARSSL_CIPHER_BLOWFISH_ECB,            0},
+        {POLARSSL_CIPHER_BLOWFISH_CBC,            0},
+        {POLARSSL_CIPHER_BLOWFISH_CFB64,          0},
+        {POLARSSL_CIPHER_BLOWFISH_CTR,            0},
+    #endif
+    #ifdef POLARSSL_ARC4_C
+        {POLARSSL_CIPHER_ARC4_128,              128},
+    #endif
+    #ifdef POLARSSL_CCM_C
+        {POLARSSL_CIPHER_AES_128_CCM,           128},
+        {POLARSSL_CIPHER_AES_192_CCM,           192},
+        {POLARSSL_CIPHER_AES_256_CCM,           256},
+        {POLARSSL_CIPHER_CAMELLIA_128_CCM,      128},
+        {POLARSSL_CIPHER_CAMELLIA_192_CCM,      192},
+        {POLARSSL_CIPHER_CAMELLIA_256_CCM,      256},
+    #endif
     };
+    int i;
 
-    if (ciphersuite_id >= 0 && ciphersuite_id < sizeof(algorithms) / sizeof(algorithms[0]))
+    for (i = 0; i < sizeof(algorithms) / sizeof(algorithms[0]); i++)
     {
-        return algorithms[ciphersuite_id];
+        if (algorithms[i].algo == cipher_suite->cipher)
+            return algorithms[i].size;
     }
 
     FIXME("Unknown cipher %#x, returning 0\n", ciphersuite_id);
@@ -529,35 +582,70 @@ static DWORD schannel_get_protocol(const ssl_context *ssl)
 
 static ALG_ID schannel_get_cipher_algid(int ciphersuite_id)
 {
-    switch (ciphersuite_id)
+    const ssl_ciphersuite_t *cipher_suite = pssl_ciphersuite_from_id( ciphersuite_id );
+    switch (cipher_suite->cipher)
     {
     case POLARSSL_CIPHER_NONE:
-    case POLARSSL_CIPHER_NULL: return 0;
-    case POLARSSL_CIPHER_ARC4_128: return CALG_RC4;
+    case POLARSSL_CIPHER_NULL:
+        return 0;
+
+#ifdef POLARSSL_ARC4_C
+    /* ARC4 */
+    case POLARSSL_CIPHER_ARC4_128:
+        return CALG_RC4;
+#endif
+
+
+#ifdef POLARSSL_DES_C
+    /* DES */
     case POLARSSL_CIPHER_DES_ECB:
     case POLARSSL_CIPHER_DES_CBC:
     case POLARSSL_CIPHER_DES_EDE_ECB:
-    case POLARSSL_CIPHER_DES_EDE_CBC: return CALG_DES;
+    case POLARSSL_CIPHER_DES_EDE_CBC:
+        return CALG_DES;
+
+    /* 3DES */
     case POLARSSL_CIPHER_DES_EDE3_ECB:
-    case POLARSSL_CIPHER_DES_EDE3_CBC: return CALG_3DES;
+    case POLARSSL_CIPHER_DES_EDE3_CBC:
+        return CALG_3DES;
+#endif
+
+#ifdef POLARSSL_AES_C
+
+    /* AES 128 */
     case POLARSSL_CIPHER_AES_128_ECB:
     case POLARSSL_CIPHER_AES_128_CBC:
     case POLARSSL_CIPHER_AES_128_CFB128:
     case POLARSSL_CIPHER_AES_128_CTR:
     case POLARSSL_CIPHER_AES_128_GCM:
-    case POLARSSL_CIPHER_AES_128_CCM: return CALG_AES_128;
+#ifdef POLARSSL_CCM_C
+    case POLARSSL_CIPHER_AES_128_CCM:
+#endif
+        return CALG_AES_128;
+
+    /* AES 192 */
     case POLARSSL_CIPHER_AES_192_ECB:
     case POLARSSL_CIPHER_AES_192_CBC:
     case POLARSSL_CIPHER_AES_192_CFB128:
     case POLARSSL_CIPHER_AES_192_CTR:
     case POLARSSL_CIPHER_AES_192_GCM:
-    case POLARSSL_CIPHER_AES_192_CCM: return CALG_AES_192;
+#ifdef POLARSSL_CCM_C
+    case POLARSSL_CIPHER_AES_192_CCM:
+#endif
+        return CALG_AES_192;
+
+    /* AES 256 */
     case POLARSSL_CIPHER_AES_256_ECB:
     case POLARSSL_CIPHER_AES_256_CBC:
     case POLARSSL_CIPHER_AES_256_CFB128:
     case POLARSSL_CIPHER_AES_256_CTR:
     case POLARSSL_CIPHER_AES_256_GCM:
-    case POLARSSL_CIPHER_AES_256_CCM: return CALG_AES_256;
+#ifdef POLARSSL_CCM_C
+    case POLARSSL_CIPHER_AES_256_CCM:
+#endif
+        return CALG_AES_256;
+#endif
+
     default:
         FIXME("unknown algorithm %d\n", ciphersuite_id);
         return 0;
@@ -592,6 +680,7 @@ static ALG_ID schannel_get_kx_algid(int ciphersuite_id)
     {
         case POLARSSL_KEY_EXCHANGE_NONE: return 0;
         case POLARSSL_KEY_EXCHANGE_RSA_PSK:
+        case POLARSSL_KEY_EXCHANGE_ECDHE_RSA:
         case POLARSSL_KEY_EXCHANGE_RSA: return CALG_RSA_KEYX;
         case POLARSSL_KEY_EXCHANGE_DHE_PSK:
         case POLARSSL_KEY_EXCHANGE_DHE_RSA: return CALG_DH_EPHEM;
@@ -671,7 +760,7 @@ SECURITY_STATUS schan_imp_send(schan_imp_session session, const void *buffer,
     POLARSSL_SESSION *s = (POLARSSL_SESSION *)session;
     ssize_t ret;
 
-    TRACE("POLARSSL %p %p %d\n", session, buffer, *length);
+    TRACE("POLARSSL %p %p %lu\n", session, buffer, *length);
 
 again:
     ret = pssl_write(&s->ssl, (unsigned char *)buffer, *length);
@@ -703,7 +792,8 @@ SECURITY_STATUS schan_imp_recv(schan_imp_session session, void *buffer,
     PPOLARSSL_SESSION s = (PPOLARSSL_SESSION)session;
     ssize_t ret;
 
-    TRACE("POLARSSL %p %p %d\n", session, buffer, *length);
+    TRACE("POLARSSL %p %p %lu\n", session, buffer, *length);
+
 again:
     ret = pssl_read(&s->ssl, (unsigned char *)buffer, *length);
 
@@ -753,6 +843,7 @@ void schan_imp_free_certificate_credentials(schan_credentials *c)
 
 BOOL schan_imp_init(void)
 {
+#ifdef __REACTOS__
     WCHAR pszSystemDir[MAX_PATH];
 
     TRACE("Schannel POLARSSL backend init\n");
@@ -761,7 +852,7 @@ BOOL schan_imp_init(void)
        ERR("GetSystemDirectory failed with error 0x%lx\n", GetLastError());
        return FALSE;
     }
-    wcscat( pszSystemDir, L"\\mbedtls.dll" );
+    wcscat(pszSystemDir, L"\\mbedtls.dll");
 
     polarssl_handle = LoadLibraryExW(pszSystemDir, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
     if (!polarssl_handle)
@@ -771,11 +862,29 @@ BOOL schan_imp_init(void)
     }
 
 #define LOAD_FUNCPTR(f) \
-    if (!(p##f = (void*)GetProcAddress(polarssl_handle, #f))) \
+    if (!(p##f = (void *)GetProcAddress(polarssl_handle, #f))) \
     { \
         ERR("Failed to load %s\n", #f); \
         goto fail; \
     }
+
+#else
+    TRACE("Schannel POLARSSL backend init\n");
+
+    polarssl_handle = wine_dlopen("libpolarssl.so", RTLD_NOW, NULL, 0);
+    if (!polarssl_handle)
+    {
+        ERR_(winediag)("Failed to load libpolarssl, secure connections will not be available.\n");
+        return FALSE;
+    }
+
+#define LOAD_FUNCPTR(f) \
+    if (!(p##f = wine_dlsym(polarssl_handle, #f, NULL, 0))) \
+    { \
+        ERR("Failed to load %s\n", #f); \
+        goto fail; \
+    }
+#endif
 
     LOAD_FUNCPTR(ssl_init)
     LOAD_FUNCPTR(ssl_free)
@@ -813,21 +922,24 @@ BOOL schan_imp_init(void)
     LOAD_FUNCPTR(x509_crt_parse)
     LOAD_FUNCPTR(x509_crt_info)
 #undef LOAD_FUNCPTR
-    if (WINE_TRACE_ON(schannel))
-        pdebug_set_threshold( 4 );
+
+    if (TRACE_ON(secur32))
+        pdebug_set_threshold(4);
 
     return TRUE;
 
 fail:
-    FreeLibrary(polarssl_handle);
-    polarssl_handle = NULL;
+    schan_imp_deinit();
     return FALSE;
 }
 
 void schan_imp_deinit(void)
 {
     TRACE("Schannel POLARSSL backend deinit\n");
-
+#ifdef __REACTOS__
     FreeLibrary(polarssl_handle);
+#else
+    wine_dlclose(polarssl_handle, NULL, 0);
+#endif
     polarssl_handle = NULL;
 }

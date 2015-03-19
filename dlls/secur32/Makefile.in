@@ -15,6 +15,7 @@ C_SRCS = \
 	schannel.c \
 	schannel_gnutls.c \
 	schannel_macosx.c \
+	schannel_mbedtls.c \
 	secur32.c \
 	thunks.c \
 	util.c \
