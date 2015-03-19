@@ -88,11 +88,13 @@ MAKE_FUNCPTR(entropy_free);
 MAKE_FUNCPTR(entropy_func);
 #undef MAKE_FUNCPTR
 
-static int schan_pull_adapter(void* t, unsigned char *buff, size_t buff_len)
+static int schan_pull_adapter(void *t, unsigned char *buff, size_t buff_len)
 {
-    struct schan_transport* transport = (struct schan_transport*)t;
+    struct schan_transport *transport = (struct schan_transport *)t;
     int ret;
+
     TRACE("POLARSSL %p %p %d\n", t, buff, buff_len);
+
     ret = schan_pull(transport, buff, &buff_len);
     if (ret == EAGAIN)
     {
@@ -101,18 +103,20 @@ static int schan_pull_adapter(void* t, unsigned char *buff, size_t buff_len)
     }
     if (ret)
     {
-        ERR("Error pulling data from SSL %d.\n", ret);
+        ERR("Error pulling data from SSL %d\n", ret);
         return -1;
     }
 
     return buff_len;
 }
 
-static int schan_push_adapter(void* t, const unsigned char *buff, size_t buff_len)
+static int schan_push_adapter(void *t, const unsigned char *buff, size_t buff_len)
 {
-    struct schan_transport* transport = (struct schan_transport*)t;
+    struct schan_transport *transport = (struct schan_transport *)t;
     int ret;
+
     TRACE("POLARSSL %p %p %d\n", t, buff, buff_len);
+
     ret = schan_push(transport, buff, &buff_len);
     if (ret == EAGAIN)
     {
@@ -132,6 +136,7 @@ DWORD schan_imp_enabled_protocols(void)
 {
     /* NOTE: No support for SSL 2.0 */
     TRACE("POLARSSL\n");
+
     return 0
 #ifdef POLARSSL_SSL_PROTO_SSL3
         | SP_PROT_SSL3_CLIENT | SP_PROT_SSL3_SERVER
@@ -148,88 +153,96 @@ DWORD schan_imp_enabled_protocols(void)
         ;
 }
 
-static void schan_polarssl_log(void * ctx, int level, const char *msg)
+static void schan_polarssl_log(void *ctx, int level, const char *msg)
 {
     TRACE("POLARSSL <%d> %s\n", level, msg);
 }
 
-static int schan_verify( void *data, x509_crt *crt, int depth, int *flags )
+static int schan_verify(void *data, x509_crt *crt, int depth, int *flags)
 {
     char buf[1024];
+    int crt_flags = *flags;
+
     ((void) data);
-    TRACE( "\nVerify requested for (Depth %d):\n", depth );
-    px509_crt_info( buf, sizeof( buf ) - 1, "", crt );
-    TRACE( "%s", buf );
-    if( ( (*flags) & BADCERT_EXPIRED ) != 0 )
-        TRACE( " ! server certificate has expired\n" );
-    if( ( (*flags) & BADCERT_REVOKED ) != 0 )
-        TRACE( " ! server certificate has been revoked\n" );
-    if( ( (*flags) & BADCERT_CN_MISMATCH ) != 0 )
-        TRACE( " ! CN mismatch\n" );
-    if( ( (*flags) & BADCERT_NOT_TRUSTED ) != 0 )
-        TRACE( " ! self-signed or not signed by a trusted CA\n" );
-    if( ( (*flags) & BADCRL_NOT_TRUSTED ) != 0 )
-        TRACE( " ! CRL not trusted\n" );
-    if( ( (*flags) & BADCRL_EXPIRED ) != 0 )
-        TRACE( " ! CRL expired\n" );
-    if( ( (*flags) & BADCERT_OTHER ) != 0 )
-        TRACE( " ! other (unknown) flag\n" );
-    if ( ( *flags ) == 0 )
-        TRACE( " This certificate has no flags\n" );
+
+    TRACE("Verify requested for (Depth %d):\n", depth);
+    px509_crt_info(buf, sizeof(buf) - 1, "", crt);
+    TRACE("%s\n", buf);
+
+    if (crt_flags & BADCERT_EXPIRED)
+        TRACE(" ! server certificate has expired\n");
+    if (crt_flags & BADCERT_REVOKED)
+        TRACE(" ! server certificate has been revoked\n");
+    if (crt_flags & BADCERT_CN_MISMATCH)
+        TRACE(" ! CN mismatch\n");
+    if (crt_flags & BADCERT_NOT_TRUSTED)
+        TRACE(" ! self-signed or not signed by a trusted CA\n");
+    if (crt_flags & BADCRL_NOT_TRUSTED)
+        TRACE(" ! CRL not trusted\n");
+    if (crt_flags & BADCRL_EXPIRED)
+        TRACE(" ! CRL expired\n");
+    if (crt_flags & BADCERT_OTHER)
+        TRACE(" ! other (unknown) flag\n");
+    if (crt_flags == 0)
+        TRACE(" This certificate has no flags\n");
+
     return( 0 );
 }
 
 BOOL schan_imp_create_session(schan_imp_session *session, schan_credentials *cred)
 {
-    PPOLARSSL_SESSION s;
+    POLARSSL_SESSION *s;
     int ret;
 
     TRACE("POLARSSL %p %p %p\n", session, *session, cred);
-    *session = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(POLARSSL_SESSION));
-    if(!(*session))
+
+    s = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(POLARSSL_SESSION));
+    if (!(*session = (schan_imp_session)s))
     {
-        ERR( "Not enough memory to create session\n" );
+        ERR("Not enough memory to create session\n");
         return FALSE;
     }
-    s = *(PPOLARSSL_SESSION *)session;
 
     TRACE("POLARSSL init entropy\n");
     pentropy_init( &s->entropy );
 
-    TRACE("POLARSSL init random\n");
-    FIXME("Change static entropy private data\n");
-    ret = pctr_drbg_init( &s->ctr_drbg, pentropy_func, &s->entropy,
-                               (const unsigned char *) "PolarSSL", 8 );
-    if( ret != 0 )
+    FIXME("POLARSSL init random - change static entropy private data\n");
+    ret = pctr_drbg_init(&s->ctr_drbg, pentropy_func, &s->entropy,
+                         (const unsigned char *)"PolarSSL", 8);
+    if (ret != 0)
     {
-        ERR( " failed\n  ! ctr_drbg_init returned %d\n", ret );
-        pentropy_free( &s->entropy );
-        HeapFree(GetProcessHeap(), 0, *session);
+        ERR("ctr_drbg_init failed with %d\n", ret);
+        pentropy_free(&s->entropy);
+        HeapFree(GetProcessHeap(), 0, s);
         return FALSE;
     }
 
     TRACE("POLARSSL init ssl\n");
-    ret = pssl_init( &s->ssl );
+    ret = pssl_init(&s->ssl);
     if (ret != 0)
     {
         ERR("Error SSL initialization 0x%x.\n", ret);
         pctr_drbg_free( &s->ctr_drbg );
         pentropy_free( &s->entropy );
-        HeapFree(GetProcessHeap(), 0, *session);
+        HeapFree(GetProcessHeap(), 0, s);
         return FALSE;
     }
+
     TRACE("POLARSSL set dbg\n");
-    pssl_set_dbg( &s->ssl, schan_polarssl_log, stdout );
+    pssl_set_dbg(&s->ssl, schan_polarssl_log, stdout);
+
     TRACE("POLARSSL set endpoint %d\n", cred->credential_use);
-    pssl_set_endpoint( &s->ssl, ( ( cred->credential_use & SECPKG_CRED_INBOUND ) != 0 ) ? SSL_IS_SERVER : SSL_IS_CLIENT );
+    pssl_set_endpoint(&s->ssl, (cred->credential_use & SECPKG_CRED_INBOUND) ? SSL_IS_SERVER : SSL_IS_CLIENT);
+
     TRACE("POLARSSL set authmode\n");
-    pssl_set_authmode( &s->ssl, SSL_VERIFY_OPTIONAL );
+    pssl_set_authmode(&s->ssl, SSL_VERIFY_OPTIONAL);
 
     TRACE("POLARSSL parse certificate %p\n", cred->credentials);
-    if(cred->credentials) {
+    if (cred->credentials)
+    {
         /*x509_crt cacert;
-        ret = px509_crt_parse( &cacert, (const unsigned char *) cred->credentials,
-                              strlen( (const char *)cred->credentials ) );
+        ret = px509_crt_parse(&cacert, (const unsigned char *)cred->credentials,
+                              strlen((const char *)cred->credentials));
         if (ret < 0)
         {
             ERR("Loading the CA root certificate failed! x509_crt_parse returned -0x%x", -ret);
@@ -240,50 +253,58 @@ BOOL schan_imp_create_session(schan_imp_session *session, schan_credentials *cre
             return FALSE;
         }*/
         TRACE("POLARSSL set server ca chain\n");
-        pssl_set_ca_chain( &s->ssl, (x509_crt *)cred->credentials, NULL, ( ( cred->credential_use & SECPKG_CRED_INBOUND ) != 0 ) ? "PolarSSL Server" : "PolarSSL client" );
+        pssl_set_ca_chain(&s->ssl, (x509_crt *)cred->credentials, NULL,
+            (cred->credential_use & SECPKG_CRED_INBOUND) ? "PolarSSL Server" : "PolarSSL client" );
     }
+
     TRACE("POLARSSL set rng\n");
-    pssl_set_rng( &s->ssl, pctr_drbg_random, &s->ctr_drbg );
+    pssl_set_rng(&s->ssl, pctr_drbg_random, &s->ctr_drbg);
+
     TRACE("POLARSSL set verify\n");
-    pssl_set_verify( &s->ssl, schan_verify, NULL );
+    pssl_set_verify(&s->ssl, schan_verify, NULL);
+
     TRACE("POLARSSL set versions\n");
-    pssl_set_min_version( &s->ssl, SSL_MIN_MAJOR_VERSION, SSL_MIN_MINOR_VERSION );
-    pssl_set_max_version( &s->ssl, SSL_MAX_MAJOR_VERSION, SSL_MAX_MINOR_VERSION );
+    pssl_set_min_version(&s->ssl, SSL_MIN_MAJOR_VERSION, SSL_MIN_MINOR_VERSION);
+    pssl_set_max_version(&s->ssl, SSL_MAX_MAJOR_VERSION, SSL_MAX_MINOR_VERSION);
 
     return TRUE;
 }
 
 void schan_imp_dispose_session(schan_imp_session session)
 {
-    PPOLARSSL_SESSION s = (PPOLARSSL_SESSION)session;
+    POLARSSL_SESSION *s = (POLARSSL_SESSION *)session;
+
     TRACE("POLARSSL %p\n", session);
-    pssl_close_notify( &s->ssl );
-    pctr_drbg_free( &s->ctr_drbg );
-    pentropy_free( &s->entropy );
-    pssl_free( &s->ssl );
+
+    pssl_close_notify(&s->ssl);
+    pctr_drbg_free(&s->ctr_drbg);
+    pentropy_free(&s->entropy);
+    pssl_free(&s->ssl);
+
     HeapFree(GetProcessHeap(), 0, s);
 }
 
 void schan_imp_set_session_transport(schan_imp_session session,
                                      struct schan_transport *t)
 {
-    PPOLARSSL_SESSION s = (PPOLARSSL_SESSION)session;
+    POLARSSL_SESSION *s = (POLARSSL_SESSION *)session;
     TRACE("POLARSSL %p %p %d\n", session, t, s->ssl.state);
+
     s->transport = t;
-    TRACE("POLARSSL set adapters\n");
-    pssl_set_bio( &s->ssl, schan_pull_adapter, t, schan_push_adapter, t );
+    pssl_set_bio(&s->ssl, schan_pull_adapter, t, schan_push_adapter, t);
 }
 
 void schan_imp_set_session_target(schan_imp_session session, const char *target)
 {
-    PPOLARSSL_SESSION s = (PPOLARSSL_SESSION)session;
+    POLARSSL_SESSION *s = (POLARSSL_SESSION *)session;
     TRACE("POLARSSL %p %p %d\n", session, target, s->ssl.state);
+
     pssl_set_hostname( &s->ssl, target );
 }
 
 SECURITY_STATUS schan_imp_handshake(schan_imp_session session)
 {
-    PPOLARSSL_SESSION s = (PPOLARSSL_SESSION)session;
+    POLARSSL_SESSION *s = (POLARSSL_SESSION *)session;
     int err;
 
     TRACE("POLARSSL %p %d\n", session, s->ssl.state);
@@ -305,7 +326,8 @@ SECURITY_STATUS schan_imp_handshake(schan_imp_session session)
         }
     }
 
-    TRACE("Handshake completed\nProtocol is %s, Cipher suite is %s\n", pssl_get_version( &s->ssl ), pssl_get_ciphersuite( &s->ssl ));
+    TRACE("Handshake completed\n");
+    TRACE("Protocol is %s, Cipher suite is %s\n", pssl_get_version(&s->ssl), pssl_get_ciphersuite(&s->ssl));
     return SEC_E_OK;
 }
 
@@ -367,14 +389,13 @@ static unsigned int schannel_get_cipher_block_size(int ciphersuite_id)
         1,  // POLARSSL_CIPHER_CAMELLIA_192_CCM
         1,  // POLARSSL_CIPHER_CAMELLIA_256_CCM
     };
-    int num_algorithms = sizeof(algorithms) / sizeof(algorithms[0]);
-    if (ciphersuite_id >= 0 && ciphersuite_id < num_algorithms)
+
+    if (ciphersuite_id >= 0 && ciphersuite_id < sizeof(algorithms) / sizeof(algorithms[0]))
     {
         return algorithms[ciphersuite_id];
     }
 
     FIXME("Unknown cipher %#x, returning 1\n", ciphersuite_id);
-
     return 1;
 }
 
@@ -434,20 +455,19 @@ static unsigned int schannel_get_cipher_key_size(int ciphersuite_id)
         192, // POLARSSL_CIPHER_CAMELLIA_192_CCM
         256, // POLARSSL_CIPHER_CAMELLIA_256_CCM
     };
-    int num_algorithms = sizeof(algorithms) / sizeof(algorithms[0]);
-    if (ciphersuite_id >= 0 && ciphersuite_id < num_algorithms)
+
+    if (ciphersuite_id >= 0 && ciphersuite_id < sizeof(algorithms) / sizeof(algorithms[0]))
     {
         return algorithms[ciphersuite_id];
     }
 
     FIXME("Unknown cipher %#x, returning 0\n", ciphersuite_id);
-
     return 0;
 }
 
 static unsigned int schannel_get_mac_key_size(int ciphersuite_id)
 {
-    const ssl_ciphersuite_t *cipher_suite = pssl_ciphersuite_from_id( ciphersuite_id );
+    const ssl_ciphersuite_t *cipher_suite = pssl_ciphersuite_from_id(ciphersuite_id);
     const unsigned int algorithms[] =
     {
         0,   // POLARSSL_MD_NONE
@@ -462,30 +482,28 @@ static unsigned int schannel_get_mac_key_size(int ciphersuite_id)
         // FIXME: ripemd160 size ???
         0, // POLARSSL_MD_RIPEMD160
     };
-    int num_algorithms = sizeof(algorithms) / sizeof(algorithms[0]);
-    if (cipher_suite->mac >= 0 && cipher_suite->mac < num_algorithms)
+
+    if (cipher_suite->mac >= 0 && cipher_suite->mac < sizeof(algorithms) / sizeof(algorithms[0]))
     {
         return algorithms[cipher_suite->mac];
     }
 
     FIXME("Unknown mac %#x for ciphersuite %#x, returning 0\n", cipher_suite->mac, ciphersuite_id);
-
     return 0;
 }
 
 static unsigned int schannel_get_kx_key_size(const ssl_context *ssl, int ciphersuite_id)
 {
-    const ssl_ciphersuite_t *cipher_suite = pssl_ciphersuite_from_id( ciphersuite_id );
-    x509_crt * server_cert/*, * client_cert*/;
-    // FIXME: if we are server take ca_chain. if we are client take server cert (peer_cert)
-    server_cert = ssl->endpoint == SSL_IS_SERVER ? ssl->ca_chain : ssl->session->peer_cert;
-    //client_cert = ssl->endpoint ? ssl->session->peer_cert : ssl->ca_chain;
+    const ssl_ciphersuite_t *cipher_suite = pssl_ciphersuite_from_id(ciphersuite_id);
+    x509_crt *server_cert;
 
-    if (POLARSSL_KEY_EXCHANGE_NONE != cipher_suite->key_exchange)
+    /* FIXME: if we are server take ca_chain. if we are client take server cert (peer_cert) */
+    server_cert = (ssl->endpoint == SSL_IS_SERVER) ? ssl->ca_chain : ssl->session->peer_cert;
+
+    if (cipher_suite->key_exchange != POLARSSL_KEY_EXCHANGE_NONE)
         return server_cert->pk.pk_info->get_size(server_cert->pk.pk_ctx);
 
-    //FIXME("Unknown kx %#x, returning 0\n", cipher_suite->key_exchange);
-
+    FIXME("Unknown kx %#x, returning 0\n", cipher_suite->key_exchange);
     return 0;
 }
 
@@ -546,7 +564,7 @@ static ALG_ID schannel_get_cipher_algid(int ciphersuite_id)
 
 static ALG_ID schannel_get_mac_algid(int ciphersuite_id)
 {
-    const ssl_ciphersuite_t *cipher_suite = pssl_ciphersuite_from_id( ciphersuite_id );
+    const ssl_ciphersuite_t *cipher_suite = pssl_ciphersuite_from_id(ciphersuite_id);
     switch (cipher_suite->mac)
     {
     case POLARSSL_MD_NONE: return 0;
@@ -567,7 +585,7 @@ static ALG_ID schannel_get_mac_algid(int ciphersuite_id)
 
 static ALG_ID schannel_get_kx_algid(int ciphersuite_id)
 {
-    const ssl_ciphersuite_t *cipher_suite = pssl_ciphersuite_from_id( ciphersuite_id );
+    const ssl_ciphersuite_t *cipher_suite = pssl_ciphersuite_from_id(ciphersuite_id);
     switch (cipher_suite->key_exchange)
     {
         case POLARSSL_KEY_EXCHANGE_NONE: return 0;
@@ -583,56 +601,62 @@ static ALG_ID schannel_get_kx_algid(int ciphersuite_id)
 
 unsigned int schan_imp_get_session_cipher_block_size(schan_imp_session session)
 {
-    PPOLARSSL_SESSION s = (PPOLARSSL_SESSION)session;
+    POLARSSL_SESSION *s = (POLARSSL_SESSION *)session;
     TRACE("POLARSSL %p\n", session);
-    return schannel_get_cipher_block_size( pssl_get_ciphersuite_id ( pssl_get_ciphersuite ( &s->ssl ) ) );
+
+    return schannel_get_cipher_block_size(pssl_get_ciphersuite_id(pssl_get_ciphersuite(&s->ssl)));
 }
 
 unsigned int schan_imp_get_max_message_size(schan_imp_session session)
 {
-    PPOLARSSL_SESSION s = (PPOLARSSL_SESSION)session;
+    POLARSSL_SESSION *s = (POLARSSL_SESSION *)session;
     TRACE("POLARSSL %p\n", session);
+
     return s->ssl.in_msglen;
 }
 
 SECURITY_STATUS schan_imp_get_connection_info(schan_imp_session session,
                                               SecPkgContext_ConnectionInfo *info)
 {
-    PPOLARSSL_SESSION s = (PPOLARSSL_SESSION)session;
+    POLARSSL_SESSION *s = (POLARSSL_SESSION *)session;
     int ciphersuite_id;
+
     TRACE("POLARSSL %p %p\n", session, info);
-    ciphersuite_id = pssl_get_ciphersuite_id ( pssl_get_ciphersuite ( &s->ssl ) );
-    info->dwProtocol = schannel_get_protocol(&s->ssl);
-    info->aiCipher = schannel_get_cipher_algid(ciphersuite_id);
-    info->dwCipherStrength = schannel_get_cipher_key_size(ciphersuite_id);
-    info->aiHash = schannel_get_mac_algid(ciphersuite_id);
-    info->dwHashStrength = schannel_get_mac_key_size(ciphersuite_id);
-    info->aiExch = schannel_get_kx_algid(ciphersuite_id);
-    // FIXME: info->dwExchStrength?
-    info->dwExchStrength = schannel_get_kx_key_size(&s->ssl, ciphersuite_id);
+
+    ciphersuite_id = pssl_get_ciphersuite_id(pssl_get_ciphersuite(&s->ssl));
+
+    info->dwProtocol        = schannel_get_protocol(&s->ssl);
+    info->aiCipher          = schannel_get_cipher_algid(ciphersuite_id);
+    info->dwCipherStrength  = schannel_get_cipher_key_size(ciphersuite_id);
+    info->aiHash            = schannel_get_mac_algid(ciphersuite_id);
+    info->dwHashStrength    = schannel_get_mac_key_size(ciphersuite_id);
+    info->aiExch            = schannel_get_kx_algid(ciphersuite_id);
+    info->dwExchStrength    = schannel_get_kx_key_size(&s->ssl, ciphersuite_id); /* FIXME */
     return SEC_E_OK;
 }
 
 SECURITY_STATUS schan_imp_get_session_peer_certificate(schan_imp_session session, HCERTSTORE store,
                                                        PCCERT_CONTEXT *ret)
 {
-    PPOLARSSL_SESSION s = (PPOLARSSL_SESSION)session;
+    POLARSSL_SESSION *s = (POLARSSL_SESSION *)session;
     PCCERT_CONTEXT cert_context = NULL;
     const x509_crt *next_cert;
 
     TRACE("POLARSSL %p %p %p %p\n", session, store, ret, ret != NULL ? *ret : NULL);
-    if(!s->ssl.session->peer_cert)
-        return SEC_E_INTERNAL_ERROR;
-    next_cert = s->ssl.session->peer_cert;
 
-    while(next_cert) {
-        if(!CertAddEncodedCertificateToStore(store, X509_ASN_ENCODING, next_cert->raw.p, next_cert->raw.len,
-                CERT_STORE_ADD_REPLACE_EXISTING, next_cert != s->ssl.session->peer_cert ? NULL : &cert_context)) {
-            if(next_cert != s->ssl.session->peer_cert)
+    if (!s->ssl.session->peer_cert)
+        return SEC_E_INTERNAL_ERROR;
+
+    for (next_cert = s->ssl.session->peer_cert; next_cert; next_cert = next_cert->next)
+    {
+        if (!CertAddEncodedCertificateToStore(store, X509_ASN_ENCODING, next_cert->raw.p, next_cert->raw.len,
+            CERT_STORE_ADD_REPLACE_EXISTING, (next_cert != s->ssl.session->peer_cert) ? NULL : &cert_context))
+        {
+            if (next_cert != s->ssl.session->peer_cert)
                 CertFreeCertificateContext(cert_context);
+
             return GetLastError();
         }
-        next_cert = next_cert->next;
     }
 
     *ret = cert_context;
@@ -642,12 +666,13 @@ SECURITY_STATUS schan_imp_get_session_peer_certificate(schan_imp_session session
 SECURITY_STATUS schan_imp_send(schan_imp_session session, const void *buffer,
                                SIZE_T *length)
 {
-    PPOLARSSL_SESSION s = (PPOLARSSL_SESSION)session;
+    POLARSSL_SESSION *s = (POLARSSL_SESSION *)session;
     ssize_t ret;
 
     TRACE("POLARSSL %p %p %d\n", session, buffer, *length);
+
 again:
-    ret = pssl_write( &s->ssl, (unsigned char *)buffer, *length );
+    ret = pssl_write(&s->ssl, (unsigned char *)buffer, *length);
 
     if (ret >= 0)
     {
@@ -678,7 +703,7 @@ SECURITY_STATUS schan_imp_recv(schan_imp_session session, void *buffer,
 
     TRACE("POLARSSL %p %p %d\n", session, buffer, *length);
 again:
-    ret = pssl_read( &s->ssl, (unsigned char *)buffer, *length );
+    ret = pssl_read(&s->ssl, (unsigned char *)buffer, *length);
 
     if (ret >= 0)
     {
@@ -704,20 +729,23 @@ again:
 BOOL schan_imp_allocate_certificate_credentials(schan_credentials *c)
 {
     TRACE("POLARSSL %p %p %d\n", c, c->credentials, c->credential_use);
+
     c->credentials = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(x509_crt));
-    if(!c->credentials)
+    if (!c->credentials)
         return FALSE;
-    px509_crt_init( (x509_crt*)c->credentials );
+
+    px509_crt_init((x509_crt *)c->credentials);
     return TRUE;
 }
 
 void schan_imp_free_certificate_credentials(schan_credentials *c)
 {
     TRACE("POLARSSL %p %p %d\n", c, c->credentials, c->credential_use);
-    if(!c->credentials) {
+
+    if (!c->credentials)
         return;
-    }
-    px509_crt_free( (x509_crt*)c->credentials );
+
+    px509_crt_free((x509_crt *)c->credentials);
     HeapFree(GetProcessHeap(), 0, c->credentials);
 }
 
@@ -726,7 +754,7 @@ BOOL schan_imp_init(void)
     WCHAR pszSystemDir[MAX_PATH];
 
     TRACE("Schannel POLARSSL backend init\n");
-    if( !GetSystemDirectoryW( (LPWSTR)pszSystemDir, sizeof( pszSystemDir)/sizeof(WCHAR) ) )
+    if (!GetSystemDirectoryW((LPWSTR)pszSystemDir, sizeof(pszSystemDir)/sizeof(WCHAR)))
     {
        ERR("GetSystemDirectory failed with error 0x%lx\n", GetLastError());
        return FALSE;
@@ -783,7 +811,7 @@ BOOL schan_imp_init(void)
     LOAD_FUNCPTR(x509_crt_parse)
     LOAD_FUNCPTR(x509_crt_info)
 #undef LOAD_FUNCPTR
-    if(WINE_TRACE_ON(schannel))
+    if (WINE_TRACE_ON(schannel))
         pdebug_set_threshold( 4 );
 
     return TRUE;
@@ -797,6 +825,7 @@ fail:
 void schan_imp_deinit(void)
 {
     TRACE("Schannel POLARSSL backend deinit\n");
+
     FreeLibrary(polarssl_handle);
     polarssl_handle = NULL;
 }
