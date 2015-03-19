@@ -308,22 +308,24 @@ SECURITY_STATUS schan_imp_handshake(schan_imp_session session)
     int err;
 
     TRACE("POLARSSL %p %d\n", session, s->ssl.state);
-    while( (err = pssl_handshake( &s->ssl )) != 0 ) {
-        if( err == POLARSSL_ERR_NET_WANT_READ || err == POLARSSL_ERR_NET_WANT_WRITE )
-        {
-            TRACE("Continue...\n");
-            return SEC_I_CONTINUE_NEEDED;
-        }
-        if( err == POLARSSL_ERR_SSL_FEATURE_UNAVAILABLE )
-        {
-            ERR("SSL Feature unavailable...\n");
-            return SEC_E_UNSUPPORTED_FUNCTION;
-        }
-        if( err != 0 )
-        {
-            ERR("Unknown code %d...\n", err);
-            return SEC_E_INTERNAL_ERROR;
-        }
+
+    err = pssl_handshake(&s->ssl);
+
+    if (err == POLARSSL_ERR_NET_WANT_READ ||
+        err == POLARSSL_ERR_NET_WANT_WRITE)
+    {
+        TRACE("Continue...\n");
+        return SEC_I_CONTINUE_NEEDED;
+    }
+    if (err == POLARSSL_ERR_SSL_FEATURE_UNAVAILABLE)
+    {
+        ERR("SSL Feature unavailable...\n");
+        return SEC_E_UNSUPPORTED_FUNCTION;
+    }
+    if (err != 0)
+    {
+        ERR("Unknown code %d...\n", err);
+        return SEC_E_INTERNAL_ERROR;
     }
 
     TRACE("Handshake completed\n");
