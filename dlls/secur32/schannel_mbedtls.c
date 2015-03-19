@@ -172,7 +172,8 @@ DWORD schan_imp_enabled_protocols(void)
 
 static void schan_polarssl_log(void *ctx, int level, const char *msg)
 {
-    TRACE("POLARSSL <%d> %s\n", level, msg);
+    int len = strlen(msg);
+    TRACE("POLARSSL <%d> %s%s", level, msg, (!len || msg[len-1] != '\n') ? "\n" : "");
 }
 
 static int schan_verify(void *data, x509_crt *crt, int depth, int *flags)
