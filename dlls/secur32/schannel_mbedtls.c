@@ -110,7 +110,7 @@ static int schan_pull_adapter(void *t, unsigned char *buff, size_t buff_len)
     struct schan_transport *transport = (struct schan_transport *)t;
     int ret;
 
-    TRACE("POLARSSL %p %p %d\n", t, buff, buff_len);
+    TRACE("POLARSSL %p %p %u\n", t, buff, buff_len);
 
     ret = schan_pull(transport, buff, &buff_len);
     if (ret == EAGAIN)
@@ -132,7 +132,7 @@ static int schan_push_adapter(void *t, const unsigned char *buff, size_t buff_le
     struct schan_transport *transport = (struct schan_transport *)t;
     int ret;
 
-    TRACE("POLARSSL %p %p %d\n", t, buff, buff_len);
+    TRACE("POLARSSL %p %p %u\n", t, buff, buff_len);
 
     ret = schan_push(transport, buff, &buff_len);
     if (ret == EAGAIN)
@@ -222,14 +222,14 @@ BOOL schan_imp_create_session(schan_imp_session *session, schan_credentials *cre
     }
 
     TRACE("POLARSSL init entropy\n");
-    pentropy_init( &s->entropy );
+    pentropy_init(&s->entropy);
 
     FIXME("POLARSSL init random - change static entropy private data\n");
     ret = pctr_drbg_init(&s->ctr_drbg, pentropy_func, &s->entropy,
                          (const unsigned char *)"PolarSSL", 8);
     if (ret != 0)
     {
-        ERR("ctr_drbg_init failed with %d\n", ret);
+        ERR("ctr_drbg_init failed with -%x\n", -ret);
         pentropy_free(&s->entropy);
         HeapFree(GetProcessHeap(), 0, s);
         return FALSE;
@@ -239,9 +239,9 @@ BOOL schan_imp_create_session(schan_imp_session *session, schan_credentials *cre
     ret = pssl_init(&s->ssl);
     if (ret != 0)
     {
-        ERR("Error SSL initialization 0x%x.\n", ret);
-        pctr_drbg_free( &s->ctr_drbg );
-        pentropy_free( &s->entropy );
+        ERR("ssl_init failed with -%x\n", -ret);
+        pctr_drbg_free(&s->ctr_drbg);
+        pentropy_free(&s->entropy);
         HeapFree(GetProcessHeap(), 0, s);
         return FALSE;
     }
@@ -342,7 +342,7 @@ SECURITY_STATUS schan_imp_handshake(schan_imp_session session)
     }
     if (err != 0)
     {
-        ERR("Unknown code %d...\n", err);
+        ERR("Unknown code -%x...\n", -err);
         return SEC_E_INTERNAL_ERROR;
     }
 
@@ -354,7 +354,7 @@ SECURITY_STATUS schan_imp_handshake(schan_imp_session session)
 
 static unsigned int schannel_get_cipher_block_size(int ciphersuite_id)
 {
-    const ssl_ciphersuite_t *cipher_suite = pssl_ciphersuite_from_id( ciphersuite_id );
+    const ssl_ciphersuite_t *cipher_suite = pssl_ciphersuite_from_id(ciphersuite_id);
     const struct
     {
         int algo;
@@ -438,7 +438,7 @@ static unsigned int schannel_get_cipher_block_size(int ciphersuite_id)
 
 static unsigned int schannel_get_cipher_key_size(int ciphersuite_id)
 {
-    const ssl_ciphersuite_t *cipher_suite = pssl_ciphersuite_from_id( ciphersuite_id );
+    const ssl_ciphersuite_t *cipher_suite = pssl_ciphersuite_from_id(ciphersuite_id);
     const struct
     {
         int algo;
@@ -571,10 +571,10 @@ static DWORD schannel_get_protocol(const ssl_context *ssl)
     //
     switch (ssl->minor_ver)
     {
-    case SSL_MINOR_VERSION_0: return ssl->endpoint == SSL_IS_CLIENT ? SP_PROT_SSL3_CLIENT : SP_PROT_SSL3_SERVER;
-    case SSL_MINOR_VERSION_1: return ssl->endpoint == SSL_IS_CLIENT ? SP_PROT_TLS1_0_CLIENT : SP_PROT_TLS1_SERVER;
-    case SSL_MINOR_VERSION_2: return ssl->endpoint == SSL_IS_CLIENT ? SP_PROT_TLS1_1_CLIENT : SP_PROT_TLS1_SERVER;
-    case SSL_MINOR_VERSION_3: return ssl->endpoint == SSL_IS_CLIENT ? SP_PROT_TLS1_2_CLIENT : SP_PROT_TLS1_SERVER;
+    case SSL_MINOR_VERSION_0: return (ssl->endpoint == SSL_IS_CLIENT) ? SP_PROT_SSL3_CLIENT : SP_PROT_SSL3_SERVER;
+    case SSL_MINOR_VERSION_1: return (ssl->endpoint == SSL_IS_CLIENT) ? SP_PROT_TLS1_0_CLIENT : SP_PROT_TLS1_SERVER;
+    case SSL_MINOR_VERSION_2: return (ssl->endpoint == SSL_IS_CLIENT) ? SP_PROT_TLS1_1_CLIENT : SP_PROT_TLS1_SERVER;
+    case SSL_MINOR_VERSION_3: return (ssl->endpoint == SSL_IS_CLIENT) ? SP_PROT_TLS1_2_CLIENT : SP_PROT_TLS1_SERVER;
     default:
         FIXME("unknown protocol %d\n", ssl->minor_ver);
         return 0;
@@ -780,7 +780,7 @@ again:
     }
     else
     {
-        ERR("Error SSL write %d.\n", ret);
+        ERR("ssl_write failed with -%x\n", -ret);
         return SEC_E_INTERNAL_ERROR;
     }
 
@@ -812,7 +812,7 @@ again:
     }
     else
     {
-        ERR("Error SSL read %d.\n", ret);
+        ERR("ssl_read failed with -%x\n", -ret);
         return SEC_E_INTERNAL_ERROR;
     }
 
@@ -858,7 +858,7 @@ BOOL schan_imp_init(void)
     polarssl_handle = LoadLibraryExW(pszSystemDir, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
     if (!polarssl_handle)
     {
-        ERR("Could not load %S.\n", pszSystemDir);
+        ERR("Could not load %S\n", pszSystemDir);
         return FALSE;
     }
 
