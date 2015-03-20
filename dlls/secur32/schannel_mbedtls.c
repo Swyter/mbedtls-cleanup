@@ -537,16 +537,16 @@ static unsigned int schannel_get_mac_key_size(int ciphersuite_id)
     const ssl_ciphersuite_t *cipher_suite = pssl_ciphersuite_from_id(ciphersuite_id);
     const unsigned int algorithms[] =
     {
-        0,   // POLARSSL_MD_NONE
-        128, // POLARSSL_MD_MD2
-        56,  // POLARSSL_MD_MD4
-        56,  // POLARSSL_MD_MD5
-        56,  // POLARSSL_MD_SHA1
-        56,  // POLARSSL_MD_SHA224
-        168, // POLARSSL_MD_SHA256
-        168, // POLARSSL_MD_SHA384
-        128, // POLARSSL_MD_SHA512
-        // 0,   // POLARSSL_MD_RIPEMD160
+        0,   /* POLARSSL_MD_NONE */
+        128, /* POLARSSL_MD_MD2 */
+        56,  /* POLARSSL_MD_MD4 */
+        56,  /* POLARSSL_MD_MD5 */
+        56,  /* POLARSSL_MD_SHA1 */
+        56,  /* POLARSSL_MD_SHA224 */
+        168, /* POLARSSL_MD_SHA256 */
+        168, /* POLARSSL_MD_SHA384 */
+        128, /* POLARSSL_MD_SHA512 */
+        /* FIXME: POLARSSL_MD_RIPEMD160 */
     };
 
     if (cipher_suite->mac >= 0 && cipher_suite->mac < sizeof(algorithms) / sizeof(algorithms[0]))
@@ -575,10 +575,9 @@ static unsigned int schannel_get_kx_key_size(const ssl_context *ssl, int ciphers
 
 static DWORD schannel_get_protocol(const ssl_context *ssl)
 {
-    // FIXME: currently schannel only implements client connections, but
-    // there's no reason it couldn't be used for servers as well.  The
-    // context doesn't tell us which it is, so decide based on ssl endpoint value.
-    //
+    /* FIXME: currently schannel only implements client connections, but
+     * there's no reason it couldn't be used for servers as well.  The
+     * context doesn't tell us which it is, so decide based on ssl endpoint value. */
     switch (ssl->minor_ver)
     {
     case SSL_MINOR_VERSION_0: return (ssl->endpoint == SSL_IS_CLIENT) ? SP_PROT_SSL3_CLIENT : SP_PROT_SSL3_SERVER;
@@ -677,7 +676,7 @@ static ALG_ID schannel_get_mac_algid(int ciphersuite_id)
     case POLARSSL_MD_SHA256: return CALG_SHA_256;
     case POLARSSL_MD_SHA384: return CALG_SHA_384;
     case POLARSSL_MD_SHA512: return CALG_SHA_512;
-    //case POLARSSL_MD_RIPEMD160: return CALG_RIPEMD;
+    /* case POLARSSL_MD_RIPEMD160: return CALG_RIPEMD; */
     default:
         FIXME("unknown algorithm %d\n", cipher_suite->mac);
         return 0;
