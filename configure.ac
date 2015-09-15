@@ -58,6 +58,7 @@ AC_ARG_WITH(hal,       AS_HELP_STRING([--without-hal],[do not use HAL (dynamic d
 AC_ARG_WITH(jpeg,      AS_HELP_STRING([--without-jpeg],[do not use JPEG]))
 AC_ARG_WITH(ldap,      AS_HELP_STRING([--without-ldap],[do not use LDAP]),
             [if test "x$withval" = "xno"; then ac_cv_header_ldap_h=no; ac_cv_header_lber_h=no; fi])
+AC_ARG_WITH(mbedtls,   AS_HELP_STRING([--with-mbedtls],[use the tinier mbedTLS instead of GnuTLS (schannel support)]))
 AC_ARG_WITH(mpg123,    AS_HELP_STRING([--without-mpg123],[do not use the mpg123 library]))
 AC_ARG_WITH(netapi,    AS_HELP_STRING([--without-netapi],[do not use the Samba NetAPI library]))
 AC_ARG_WITH(openal,    AS_HELP_STRING([--without-openal],[do not use OpenAL]),
@@ -1363,6 +1364,18 @@ then
                                "x$ac_cv_header_DiskArbitration_DiskArbitration_h" != "xyes"],
                      [libhal ${notice_platform}development files not found, no legacy dynamic device support.])
 fi
+
+dnl **** Check for mbedTLS ****
+if test "x$with_mbedtls" != "xno"
+then
+    with_gnutls=${with_gnutls:-no}
+    WINE_PACKAGE_FLAGS(MBEDTLS,[mbedtls],,,,
+        [AC_CHECK_HEADER(polarssl/ssl.h,
+            [WINE_CHECK_SONAME(mbedtls,ssl_init,,,)]
+        )])
+fi
+WINE_WARNING_WITH(mbedtls,[test "x$ac_cv_lib_soname_mbedtls" = "x"],
+                 [mbedtls ${notice_platform}development files not found, no schannel support.])
 
 dnl **** Check for libgnutls ****
 if test "x$with_gnutls" != "xno"

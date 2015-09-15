@@ -668,6 +668,8 @@ SANE_LIBS
 SANE_CFLAGS
 GNUTLS_LIBS
 GNUTLS_CFLAGS
+MBEDTLS_LIBS
+MBEDTLS_CFLAGS
 HAL_LIBS
 HAL_CFLAGS
 DBUS_LIBS
@@ -817,6 +819,7 @@ with_gstreamer
 with_hal
 with_jpeg
 with_ldap
+with_mbedtls
 with_mpg123
 with_netapi
 with_openal
@@ -1456,6 +1459,8 @@ DBUS_CFLAGS
 DBUS_LIBS
 HAL_CFLAGS
 HAL_LIBS
+MBEDTLS_CFLAGS
+MBEDTLS_LIBS
 GNUTLS_CFLAGS
 GNUTLS_LIBS
 SANE_CFLAGS
@@ -2129,6 +2134,8 @@ Optional Packages:
   --without-hal           do not use HAL (dynamic device support)
   --without-jpeg          do not use JPEG
   --without-ldap          do not use LDAP
+  --with-mbedtls          use the tinier mbedTLS instead of GnuTLS (schannel
+                          support)
   --without-mpg123        do not use the mpg123 library
   --without-netapi        do not use the Samba NetAPI library
   --without-openal        do not use OpenAL
@@ -2179,6 +2186,10 @@ Some influential environment variables:
   DBUS_LIBS   Linker flags for dbus-1, overriding pkg-config
   HAL_CFLAGS  C compiler flags for hal, overriding pkg-config
   HAL_LIBS    Linker flags for hal, overriding pkg-config
+  MBEDTLS_CFLAGS
+              C compiler flags for mbedtls, overriding pkg-config
+  MBEDTLS_LIBS
+              Linker flags for mbedtls, overriding pkg-config
   GNUTLS_CFLAGS
               C compiler flags for gnutls, overriding pkg-config
   GNUTLS_LIBS Linker flags for gnutls, overriding pkg-config
@@ -3323,6 +3334,12 @@ fi
 # Check whether --with-ldap was given.
 if test "${with_ldap+set}" = set; then :
   withval=$with_ldap; if test "x$withval" = "xno"; then ac_cv_header_ldap_h=no; ac_cv_header_lber_h=no; fi
+fi
+
+
+# Check whether --with-mbedtls was given.
+if test "${with_mbedtls+set}" = set; then :
+  withval=$with_mbedtls;
 fi
 
 
@@ -6126,7 +6143,7 @@ else
     We can't simply define LARGE_OFF_T to be 9223372036854775807,
     since some C++ compilers masquerading as C compilers
     incorrectly reject 9223372036854775807.  */
-#define LARGE_OFF_T ((((off_t) 1 << 31) << 31) - 1 + (((off_t) 1 << 31) << 31))
+#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
   int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
 		       && LARGE_OFF_T % 2147483647 == 1)
 		      ? 1 : -1];
@@ -6172,7 +6189,7 @@ else
     We can't simply define LARGE_OFF_T to be 9223372036854775807,
     since some C++ compilers masquerading as C compilers
     incorrectly reject 9223372036854775807.  */
-#define LARGE_OFF_T ((((off_t) 1 << 31) << 31) - 1 + (((off_t) 1 << 31) << 31))
+#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
   int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
 		       && LARGE_OFF_T % 2147483647 == 1)
 		      ? 1 : -1];
@@ -6196,7 +6213,7 @@ rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
     We can't simply define LARGE_OFF_T to be 9223372036854775807,
     since some C++ compilers masquerading as C compilers
     incorrectly reject 9223372036854775807.  */
-#define LARGE_OFF_T ((((off_t) 1 << 31) << 31) - 1 + (((off_t) 1 << 31) << 31))
+#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
   int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
 		       && LARGE_OFF_T % 2147483647 == 1)
 		      ? 1 : -1];
@@ -6241,7 +6258,7 @@ else
     We can't simply define LARGE_OFF_T to be 9223372036854775807,
     since some C++ compilers masquerading as C compilers
     incorrectly reject 9223372036854775807.  */
-#define LARGE_OFF_T ((((off_t) 1 << 31) << 31) - 1 + (((off_t) 1 << 31) << 31))
+#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
   int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
 		       && LARGE_OFF_T % 2147483647 == 1)
 		      ? 1 : -1];
@@ -6265,7 +6282,7 @@ rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
     We can't simply define LARGE_OFF_T to be 9223372036854775807,
     since some C++ compilers masquerading as C compilers
     incorrectly reject 9223372036854775807.  */
-#define LARGE_OFF_T ((((off_t) 1 << 31) << 31) - 1 + (((off_t) 1 << 31) << 31))
+#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
   int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
 		       && LARGE_OFF_T % 2147483647 == 1)
 		      ? 1 : -1];
@@ -11367,6 +11384,99 @@ test -z "$HAL_LIBS" || HAL_LIBS=`echo " $HAL_LIBS" | sed 's/ -L\([^/]\)/ -L\$(to
 This is an error since --with-hal was requested." "$LINENO" 5 ;;
 esac
 fi
+fi
+
+if test "x$with_mbedtls" != "xno"
+then
+    with_gnutls=${with_gnutls:-no}
+    if ${MBEDTLS_CFLAGS:+false} :; then :
+  if ${PKG_CONFIG+:} false; then :
+  MBEDTLS_CFLAGS=`$PKG_CONFIG --cflags mbedtls 2>/dev/null`
+fi
+fi
+
+if ${MBEDTLS_LIBS:+false} :; then :
+  if ${PKG_CONFIG+:} false; then :
+  MBEDTLS_LIBS=`$PKG_CONFIG --libs mbedtls 2>/dev/null`
+fi
+fi
+
+
+$as_echo "$as_me:${as_lineno-$LINENO}: mbedtls cflags: $MBEDTLS_CFLAGS" >&5
+$as_echo "$as_me:${as_lineno-$LINENO}: mbedtls libs: $MBEDTLS_LIBS" >&5
+ac_save_CPPFLAGS=$CPPFLAGS
+CPPFLAGS="$CPPFLAGS $MBEDTLS_CFLAGS"
+ac_fn_c_check_header_mongrel "$LINENO" "polarssl/ssl.h" "ac_cv_header_polarssl_ssl_h" "$ac_includes_default"
+if test "x$ac_cv_header_polarssl_ssl_h" = xyes; then :
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for -lmbedtls" >&5
+$as_echo_n "checking for -lmbedtls... " >&6; }
+if ${ac_cv_lib_soname_mbedtls+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_check_soname_save_LIBS=$LIBS
+LIBS="-lmbedtls  $LIBS"
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char ssl_init ();
+int
+main ()
+{
+return ssl_init ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  case "$LIBEXT" in
+    dll) ac_cv_lib_soname_mbedtls=`$ac_cv_path_LDD conftest.exe | grep "mbedtls" | sed -e "s/dll.*/dll/"';2,$d'` ;;
+    dylib) ac_cv_lib_soname_mbedtls=`otool -L conftest$ac_exeext | grep "libmbedtls\\.[0-9A-Za-z.]*dylib" | sed -e "s/^.*\/\(libmbedtls\.[0-9A-Za-z.]*dylib\).*$/\1/"';2,$d'` ;;
+    *) ac_cv_lib_soname_mbedtls=`$READELF -d conftest$ac_exeext | grep "NEEDED.*libmbedtls\\.$LIBEXT" | sed -e "s/^.*\\[\\(libmbedtls\\.$LIBEXT[^	 ]*\\)\\].*$/\1/"';2,$d'`
+       if ${ac_cv_lib_soname_mbedtls:+false} :; then :
+  ac_cv_lib_soname_mbedtls=`$LDD conftest$ac_exeext | grep "libmbedtls\\.$LIBEXT" | sed -e "s/^.*\(libmbedtls\.$LIBEXT[^	 ]*\).*$/\1/"';2,$d'`
+fi ;;
+  esac
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+  LIBS=$ac_check_soname_save_LIBS
+fi
+if ${ac_cv_lib_soname_mbedtls:+false} :; then :
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: not found" >&5
+$as_echo "not found" >&6; }
+
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_soname_mbedtls" >&5
+$as_echo "$ac_cv_lib_soname_mbedtls" >&6; }
+
+cat >>confdefs.h <<_ACEOF
+#define SONAME_LIBMBEDTLS "$ac_cv_lib_soname_mbedtls"
+_ACEOF
+
+
+fi
+
+fi
+
+
+CPPFLAGS=$ac_save_CPPFLAGS
+test -z "$MBEDTLS_CFLAGS" || MBEDTLS_CFLAGS=`echo " $MBEDTLS_CFLAGS" | sed 's/ -I\([^/]\)/ -I\$(top_builddir)\/\1/g'`
+test -z "$MBEDTLS_LIBS" || MBEDTLS_LIBS=`echo " $MBEDTLS_LIBS" | sed 's/ -L\([^/]\)/ -L\$(top_builddir)\/\1/g'`
+
+fi
+if test "x$ac_cv_lib_soname_mbedtls" = "x"; then :
+  case "x$with_mbedtls" in
+  x)   as_fn_append wine_warnings "|mbedtls ${notice_platform}development files not found, no schannel support." ;;
+  xno) ;;
+  *)   as_fn_error $? "mbedtls ${notice_platform}development files not found, no schannel support.
+This is an error since --with-mbedtls was requested." "$LINENO" 5 ;;
+esac
 fi
 
 if test "x$with_gnutls" != "xno"
@@ -16898,6 +17008,8 @@ DBUS_CFLAGS = $DBUS_CFLAGS
 DBUS_LIBS = $DBUS_LIBS
 HAL_CFLAGS = $HAL_CFLAGS
 HAL_LIBS = $HAL_LIBS
+MBEDTLS_CFLAGS = $MBEDTLS_CFLAGS
+MBEDTLS_LIBS = $MBEDTLS_LIBS
 GNUTLS_CFLAGS = $GNUTLS_CFLAGS
 GNUTLS_LIBS = $GNUTLS_LIBS
 SANE_CFLAGS = $SANE_CFLAGS
