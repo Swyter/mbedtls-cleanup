@@ -20,8 +20,6 @@
  * implementation on top of the PolarSSL/mbedTLS open source library.
  */
 
-#define SONAME_LIBMBEDTLS "libmbedtls.so"
-
 static void *libmbedtls_handle;
 
 #define MAKE_FUNCPTR(f) static typeof(f) * p##f;

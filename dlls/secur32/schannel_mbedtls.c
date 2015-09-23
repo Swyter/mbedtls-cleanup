@@ -1,4 +1,7 @@
-/* Copyright 2015 Peter Hater
+/*
+ * Lightweight mbedTLS-based implementation of the schannel (SSL/TLS) provider.
+ *
+ * Copyright 2015 Peter Hater
  * Copyright 2015 Ismael Ferreras Morezuelas <swyterzone+ros@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
@@ -14,49 +17,43 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
- *
- * --
- *
- * This file implements the schannel SSL/TLS provider by using the lightweight PolarSSL/mbedTLS open source library.
  */
 
-#if defined(SONAME_LIBMBEDTLS) && !defined(HAVE_SECURITY_SECURITY_H) && !defined(SONAME_LIBGNUTLS)
+#include "config.h"
+#include "wine/port.h"
 
-#ifdef __REACTOS__
- #include "precomp.h"
- #include <wine/config.h>
- #include <wine/port.h>
- #include <strsafe.h>
- #include "schannel_priv.h"
-#else
- #include "config.h"
- #include "wine/port.h"
- #include <errno.h>
- #include <stdarg.h>
- #include "windef.h"
- #include "winbase.h"
- #include "sspi.h"
- #include "schannel.h"
- #include "wine/debug.h"
- #include "secur32_priv.h"
-#endif
+#include <errno.h>
+#include "windef.h"
+#include "winbase.h"
+#include "sspi.h"
+#include "schannel.h"
+#include "secur32_priv.h"
+#include "wine/debug.h"
+#include "wine/library.h"
+
+#if defined(SONAME_LIBMBEDTLS) && !defined(HAVE_SECURITY_SECURITY_H) && !defined(SONAME_LIBGNUTLS)
 
 #include <polarssl/ssl.h>
 #include <polarssl/entropy.h>
 #include <polarssl/ctr_drbg.h>
 
-#ifdef __REACTOS__
- #define __wine_dbch_secur32 __wine_dbch_schannel
-#else
- #include "wine/library.h"
- #include "schannel_mbedtls_lazyload.h"
- WINE_DEFAULT_DEBUG_CHANNEL(secur32);
- WINE_DECLARE_DEBUG_CHANNEL(winediag);
-#endif
+WINE_DEFAULT_DEBUG_CHANNEL(secur32);
 
 #define ROS_SCHAN_IS_BLOCKING (0xCCCFFFFF & 0xFFF00000)
 #define ROS_SCHAN_IS_BLOCKING_MARSHALL(read_len) (ROS_SCHAN_IS_BLOCKING | (read_len & 0x000FFFFF))
 #define ROS_SCHAN_IS_BLOCKING_RETRIEVE(read_len)                          (read_len & 0x000FFFFF)
+
+#ifndef __REACTOS_
+
+ /* WINE prefers to keep it optional, disable this to link explicitly */
+ #include "schannel_mbedtls_lazyload.h"
+
+ /* WINE does not define this standard win32 macro for some reason */
+ #ifndef _countof
+  #define _countof(a) (sizeof(a)/sizeof(*(a)))
+ #endif
+
+#endif
 
 typedef struct
 {
@@ -65,7 +62,6 @@ typedef struct
     ctr_drbg_context ctr_drbg;
     struct schan_transport *transport;
 } POLARSSL_SESSION, *PPOLARSSL_SESSION;
-
 
 /* custom `net_recv` callback adapter, mbedTLS uses it in ssl_read for
    pulling data from the underlying win32 net stack */
@@ -539,23 +535,19 @@ static DWORD schannel_get_protocol(const ssl_context *ssl)
     {
         case SSL_MINOR_VERSION_0:
             return (ssl->endpoint == SSL_IS_CLIENT) ? SP_PROT_SSL3_CLIENT :
-                                                      SP_PROT_SSL3_SERVER
-        ;
+                                                      SP_PROT_SSL3_SERVER;
 
         case SSL_MINOR_VERSION_1:
             return (ssl->endpoint == SSL_IS_CLIENT) ? SP_PROT_TLS1_0_CLIENT :
-                                                      SP_PROT_TLS1_0_SERVER
-        ;
+                                                      SP_PROT_TLS1_0_SERVER;
 
         case SSL_MINOR_VERSION_2:
             return (ssl->endpoint == SSL_IS_CLIENT) ? SP_PROT_TLS1_1_CLIENT :
-                                                      SP_PROT_TLS1_1_SERVER
-        ;
+                                                      SP_PROT_TLS1_1_SERVER;
 
         case SSL_MINOR_VERSION_3:
             return (ssl->endpoint == SSL_IS_CLIENT) ? SP_PROT_TLS1_2_CLIENT :
-                                                      SP_PROT_TLS1_2_SERVER
-        ;
+                                                      SP_PROT_TLS1_2_SERVER;
 
         default:
         {
@@ -770,7 +762,7 @@ SECURITY_STATUS schan_imp_send(schan_imp_session session, const void *buffer,
 
     if (ret >= 0)
     {
-        TRACE("POLARSSL schan_imp_send: ret=%lu.\n", ret);
+        TRACE("POLARSSL schan_imp_send: ret=%i.\n", ret);
 
         *length = ret;
     }
@@ -780,12 +772,12 @@ SECURITY_STATUS schan_imp_send(schan_imp_session session, const void *buffer,
 
         if (!*length)
         {
-            TRACE("POLARSSL schan_imp_send: ret=POLARSSL_ERR_NET_WANT_WRITE -> SEC_I_CONTINUE_NEEDED; len=%u", length);
+            TRACE("POLARSSL schan_imp_send: ret=POLARSSL_ERR_NET_WANT_WRITE -> SEC_I_CONTINUE_NEEDED; len=%lu", *length);
             return SEC_I_CONTINUE_NEEDED;
         }
         else
         {
-            TRACE("POLARSSL schan_imp_send: ret=POLARSSL_ERR_NET_WANT_WRITE -> SEC_E_OK; len=%u", length);
+            TRACE("POLARSSL schan_imp_send: ret=POLARSSL_ERR_NET_WANT_WRITE -> SEC_E_OK; len=%lu", *length);
             return SEC_E_OK;
         }
     }
@@ -812,7 +804,7 @@ SECURITY_STATUS schan_imp_recv(schan_imp_session session, void *buffer,
 
     if (ret >= 0)
     {
-        TRACE("POLARSSL schan_imp_recv: ret == %lu.\n", ret);
+        TRACE("POLARSSL schan_imp_recv: ret == %i.\n", ret);
 
         *length = ret;
     }
@@ -822,12 +814,12 @@ SECURITY_STATUS schan_imp_recv(schan_imp_session session, void *buffer,
 
         if (!*length)
         {
-            TRACE("POLARSSL schan_imp_recv: ret=POLARSSL_ERR_NET_WANT_WRITE -> SEC_I_CONTINUE_NEEDED; len=%u", length);
+            TRACE("POLARSSL schan_imp_recv: ret=POLARSSL_ERR_NET_WANT_WRITE -> SEC_I_CONTINUE_NEEDED; len=%lu", *length);
             return SEC_I_CONTINUE_NEEDED;
         }
         else
         {
-            TRACE("POLARSSL schan_imp_recv: ret=POLARSSL_ERR_NET_WANT_WRITE -> SEC_E_OK; len=%u", length);
+            TRACE("POLARSSL schan_imp_recv: ret=POLARSSL_ERR_NET_WANT_WRITE -> SEC_E_OK; len=%lu", *length);
             return SEC_E_OK;
         }
     }

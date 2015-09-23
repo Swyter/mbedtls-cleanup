@@ -1347,6 +1347,9 @@
 /* Define to the soname of the libjpeg library. */
 #undef SONAME_LIBJPEG
 
+/* Define to the soname of the libmbedtls library. */
+#undef SONAME_LIBMBEDTLS
+
 /* Define to the soname of the libncurses library. */
 #undef SONAME_LIBNCURSES
 
