@@ -1,6 +1,6 @@
 MODULE    = secur32.dll
 IMPORTLIB = secur32
-IMPORTS   = netapi32 advapi32 # mbedtls
+IMPORTS   = netapi32 advapi32
 DELAYIMPORTS = crypt32
 EXTRAINCL = $(GNUTLS_CFLAGS)
 EXTRALIBS = $(SECURITY_LIBS)

@@ -22,12 +22,13 @@
 #include "config.h"
 #include "wine/port.h"
 
+#include <stdarg.h>
 #include <errno.h>
+
 #include "windef.h"
 #include "winbase.h"
 #include "sspi.h"
 #include "schannel.h"
-#include "secur32_priv.h"
 #include "wine/debug.h"
 #include "wine/library.h"
 
@@ -37,13 +38,17 @@
 #include <polarssl/entropy.h>
 #include <polarssl/ctr_drbg.h>
 
-WINE_DEFAULT_DEBUG_CHANNEL(secur32);
-
 #define ROS_SCHAN_IS_BLOCKING (0xCCCFFFFF & 0xFFF00000)
 #define ROS_SCHAN_IS_BLOCKING_MARSHALL(read_len) (ROS_SCHAN_IS_BLOCKING | (read_len & 0x000FFFFF))
 #define ROS_SCHAN_IS_BLOCKING_RETRIEVE(read_len)                          (read_len & 0x000FFFFF)
 
-#ifndef __REACTOS_
+#ifndef __REACTOS__
+
+ /* WINE defines the back-end glue in here */
+ #include "secur32_priv.h"
+
+ /* in ReactOS we use schannel instead of secur32 */
+ WINE_DEFAULT_DEBUG_CHANNEL(secur32);
 
  /* WINE prefers to keep it optional, disable this to link explicitly */
  #include "schannel_mbedtls_lazyload.h"
@@ -71,11 +76,11 @@ static int schan_pull_adapter(void *session, unsigned char *buff, size_t buff_le
     size_t requested = buff_len;
     int status;
 
-    TRACE("POLARSSL schan_pull_adapter: (%p/%p, %p, %lu)\n", s, s->transport, buff, buff_len);
+    TRACE("POLARSSL schan_pull_adapter: (%p/%p, %p, %u)\n", s, s->transport, buff, buff_len);
 
     status = schan_pull(s->transport, buff, &buff_len);
 
-    TRACE("POLARSSL schan_pull_adapter: (%p/%p, %p, %lu) status: %#x\n", s, s->transport, buff, buff_len, status);
+    TRACE("POLARSSL schan_pull_adapter: (%p/%p, %p, %u) status: %#x\n", s, s->transport, buff, buff_len, status);
 
     if (status == NO_ERROR)
     {
@@ -88,18 +93,18 @@ static int schan_pull_adapter(void *session, unsigned char *buff, size_t buff_le
         /* there's still some bytes that need pulling */
         else if (buff_len < requested)
         {
-            TRACE("Pulled %lu bytes before would block\n", buff_len);
+            TRACE("Pulled %u bytes before would block\n", buff_len);
             return ROS_SCHAN_IS_BLOCKING_MARSHALL(buff_len);
         }
         else
         {
-            TRACE("Pulled %lu bytes\n", buff_len);
+            TRACE("Pulled %u bytes\n", buff_len);
             return buff_len;
         }
     }
     else if (status == EAGAIN)
     {
-        TRACE("Would block before being able to pull anything, passing buff_len=%lu\n", buff_len);
+        TRACE("Would block before being able to pull anything, passing buff_len=%u\n", buff_len);
         return ROS_SCHAN_IS_BLOCKING_MARSHALL(buff_len);
     }
     else
@@ -119,20 +124,20 @@ static int schan_push_adapter(void *session, const unsigned char *buff, size_t b
     POLARSSL_SESSION *s = session;
     int status;
 
-    TRACE("POLARSSL schan_push_adapter: (%p/%p, %p, %lu)\n", s, s->transport, buff, buff_len);
+    TRACE("POLARSSL schan_push_adapter: (%p/%p, %p, %u)\n", s, s->transport, buff, buff_len);
 
     status = schan_push(s->transport, buff, &buff_len);
 
-    TRACE("POLARSSL schan_push_adapter: (%p/%p, %p, %lu) status: %#x\n", s, s->transport, buff, buff_len, status);
+    TRACE("POLARSSL schan_push_adapter: (%p/%p, %p, %u) status: %#x\n", s, s->transport, buff, buff_len, status);
 
     if (status == NO_ERROR)
     {
-        TRACE("Pushed %lu bytes\n", buff_len);
+        TRACE("Pushed %u bytes\n", buff_len);
         return buff_len;
     }
     else if (status == EAGAIN)
     {
-        TRACE("Would block before being able to push anything. passing %lu\n", buff_len);
+        TRACE("Would block before being able to push anything. passing %u\n", buff_len);
         return ROS_SCHAN_IS_BLOCKING_MARSHALL(buff_len);
     }
     else
